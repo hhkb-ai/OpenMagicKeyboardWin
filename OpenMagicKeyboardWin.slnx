@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="src/">
+    <Project Path="src/OpenMagicKeyboard.Shared/OpenMagicKeyboard.Shared.csproj" />
+    <Project Path="src/OpenMagicKeyboard.App/OpenMagicKeyboard.App.csproj" />
+  </Folder>
+  <Folder Name="tools/">
+    <Project Path="tools/A2450HidLogger/A2450HidLogger.csproj" />
+  </Folder>
+</Solution>
