@@ -6,7 +6,7 @@
  *
  * Report layout:
  *   Byte 0 = Report ID (0x01)
- *   Byte 1 = Modifier (standard HID, but see note below)
+ *   Byte 1 = Modifier (standard HID Keyboard modifier bitmap)
  *   Byte 2 = Reserved (0x00)
  *   Byte 3 = Key slot 1 (HID Usage Code, Usage Page 0x07)
  *   Byte 4 = Key slot 2
@@ -16,19 +16,29 @@
  *   Byte 8 = Key slot 6
  *   Byte 9 = Apple Fn/Globe state (0x00=released, 0x02=pressed)
  *
- * IMPORTANT — Modifier byte (Byte 1) bit mapping:
- *   USBPcap shows that on A2450, Left Ctrl produces byte 1 = 0x01.
- *   Standard HID defines bit 0 as Left Shift and bit 1 as Left Ctrl,
- *   but this keyboard uses bit 0 for Left Ctrl.
- *   This may be a firmware quirk or HID descriptor difference.
+ * Modifier byte (Byte 1) bit mapping:
+ *   This matches the standard HID Keyboard modifier bitmap:
+ *     bit 0 = Left Ctrl   (0x01)
+ *     bit 1 = Left Shift  (0x02)
+ *     bit 2 = Left Alt    (0x04)
+ *     bit 3 = Left GUI    (0x08)
+ *     bit 4 = Right Ctrl  (0x10)
+ *     bit 5 = Right Shift (0x20)
+ *     bit 6 = Right Alt   (0x40)
+ *     bit 7 = Right GUI   (0x80)
  *
- * This is a design skeleton only.
+ *   USBPcap confirms A2450 Left Ctrl produces byte 1 = 0x01,
+ *   which is consistent with the standard HID modifier bitmap.
+ *
+ * DESIGN / BUILD SKELETON ONLY.
  * Do not install.
- * Do not bind to real hardware yet.
+ * Do not bind to real hardware.
  * Do not run on production machines.
  */
 
 #pragma once
+
+#include <ntddk.h>
 
 #define A2450_REPORT_LENGTH     10
 #define A2450_REPORT_ID         0x01
@@ -63,7 +73,7 @@
 #define A2450_USB_PID           0x029C
 
 /*
- * Inline helper: check if a report is an A2450 keyboard report.
+ * Inline helper: check if a report is an A2450 keyboard report (10 bytes, ID 0x01).
  */
 __forceinline BOOLEAN
 A2450IsKeyboardReport(_In_reads_(Length) const UCHAR* Report, _In_ size_t Length)

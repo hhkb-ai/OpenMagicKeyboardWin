@@ -1,9 +1,9 @@
 /*
  * Filter.c — HID report interception and transformation.
  *
- * This is a design skeleton only.
+ * DESIGN / BUILD SKELETON ONLY.
  * Do not install.
- * Do not bind to real hardware yet.
+ * Do not bind to real hardware.
  * Do not run on production machines.
  *
  * This file contains the core filter logic that intercepts HID reports
@@ -12,27 +12,24 @@
  * HID filter driver I/O model:
  * ============================
  *
- * A HID lower filter driver intercepts reports by handling
- * IOCTL_HID_READ_REPORT (IRP_MJ_DEVICE_CONTROL) from the upper
- * HID class driver (kbdhid.sys).
+ * Kernel-mode HID clients typically use internal device control paths.
+ * This scaffold assumes EvtIoInternalDeviceControl / IOCTL_HID_READ_REPORT
+ * interception, but the exact queue routing must be verified during WDK
+ * build and driver stack testing.
  *
- * The flow is:
+ * The intended flow (completion routine model):
  *
- *   1. kbdhid.sys sends IOCTL_HID_READ_REPORT to read the next report
+ *   1. Upper HID class driver sends IOCTL_HID_READ_REPORT
  *   2. Our filter intercepts this IOCTL
- *   3. We forward it down to hidusb.sys (the real device)
- *   4. When hidusb.sys completes the IRP with raw data, our completion
- *      routine fires
+ *   3. We forward it down to the lower driver
+ *   4. When the lower driver completes the IRP with raw data, our
+ *      completion routine fires
  *   5. In the completion routine, we transform the report in-place
- *   6. We complete the IRP back to kbdhid.sys with the modified report
+ *   6. We complete the IRP back to the upper driver with the modified report
  *
- * Alternative approach (not yet decided):
- *   - Use EvtIoRead on a sequential queue
- *   - This may not work directly for HID because HID uses
- *     IOCTL_HID_READ_REPORT, not IRP_MJ_READ
- *
- * The approach chosen here is the completion routine model,
- * which is the standard pattern for HID filter drivers.
+ * TODO: The exact IOCTL routing (EvtIoInternalDeviceControl vs other
+ * mechanisms) must be verified during WDK build. Do not assume a
+ * specific path without testing.
  */
 
 #include <ntddk.h>
@@ -46,6 +43,8 @@
  * In a KMDF filter, we can use WdfFdoInitSetFilter() to mark
  * ourselves as a filter driver, then use an EvtIoInternalDeviceControl
  * callback to intercept HID IOCTLs.
+ *
+ * NOTE: The exact routing mechanism must be verified during WDK build.
  */
 
 /*

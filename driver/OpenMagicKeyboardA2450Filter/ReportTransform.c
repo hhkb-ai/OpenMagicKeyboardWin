@@ -80,8 +80,9 @@ A2450TransformKeyboardReport(
      *
      * kbdhid.sys ignores Byte 9, but clearing it keeps the output clean.
      * We already extracted physicalFnDown above, so this is safe.
+     * Only set modified=TRUE if the byte actually changed.
      */
-    if (State->ClearAppleFnByte)
+    if (State->ClearAppleFnByte && (Report[9] & A2450_APPLE_FN_MASK) != 0)
     {
         Report[9] &= ~A2450_APPLE_FN_MASK;
         modified = TRUE;
@@ -160,9 +161,11 @@ A2450RemapFnLayerKey(_In_ UCHAR Usage)
     /*
      * F7-F12 media keys need Consumer Control Usage Page 0x0C.
      * Standard keyboard reports (Usage Page 0x07) cannot output media keys.
-     * This requires either:
-     *   - A separate Consumer Control HID report via COL03
+     * This belongs to MVP-B and requires either:
+     *   - Synthesizing a Consumer Control Input Report for COL02
      *   - A virtual HID device that exposes Consumer Control
+     *
+     * Do not send Output Reports to the physical COL02 device.
      *
      * F7  (0x40) → Previous Track
      * F8  (0x41) → Play/Pause

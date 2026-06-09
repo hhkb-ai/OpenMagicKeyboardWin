@@ -105,3 +105,27 @@ From the 37 C# unit tests, these are directly relevant to MVP-A driver logic:
 | Fn + Backspace | `01 00 00 2A...02` | `01 01 00 2A...00` |
 
 All 37 tests pass. C# implementation is the reference; C driver must produce identical byte-level output for the same input.
+
+## Review Fixes Applied
+
+### A2450Report.h modifier comment
+
+The modifier byte (Byte 1) bit mapping comment was corrected. The standard HID Keyboard modifier bitmap defines:
+
+- bit 0 = Left Ctrl (0x01)
+- bit 1 = Left Shift (0x02)
+
+USBPcap confirms A2450 follows this standard. The previous comment incorrectly stated A2450 deviated from the standard.
+
+### C driver modified return value
+
+`ReportTransform.c` was updated so that `ClearAppleFnByte` only sets `modified = TRUE` when the byte actually changes. Idle reports (Byte 9 already 0x00) now correctly return `FALSE`.
+
+### Media key channel
+
+The C driver comment previously referenced COL03 for Consumer Control. This was corrected to COL02, matching the real device descriptor dump:
+
+- COL02 = Consumer Control (UsagePage 0x000C, 2-byte input)
+- COL03 = Vendor Defined (UsagePage 0xFF00, 65-byte input)
+
+Do not send Output Reports to the physical COL02 device.
