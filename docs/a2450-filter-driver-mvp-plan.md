@@ -309,28 +309,40 @@ uint8_t remapFnLayerKey(uint8_t usage) {
 
 媒体键（Play/Pause、Volume 等）属于 **Consumer Control Usage Page（0x0C）**，需要通过单独的 HID Report 输出。
 
-### A2450 的 Consumer Control 接口
+### A2450 的 Consumer Control 接口（真实设备验证）
 
-USBPcap 抓包发现 A2450 暴露了多个 HID 接口：
+通过 `A2450DescriptorDump` 在真实 A2450 USB 设备上确认：
 
-| 接口 | 用途 |
-|------|------|
-| COL01 | 标准键盘（Report ID 0x01） |
-| COL02 | 供应商定义 |
-| COL03 | 65 字节接口（可能含 Consumer Control） |
+| 接口 | UsagePage | Usage | InputReportLen | 说明 |
+|------|-----------|-------|---------------|------|
+| COL01 | 0x0001 | 0x0006 | 10 | 标准键盘 |
+| **COL02** | **0x000C** | 0x0001 | **2** | **Consumer Control** |
+| COL03 | 0xFF00 | 0x0006 | 65 | Vendor Defined |
 
-### 媒体键方案（不在 MVP 范围内）
+**关键修正：COL02 才是 Consumer Control，不是 COL03。**
+
+### 媒体键方案
 
 | 方案 | 可行性 | 说明 |
 |------|--------|------|
-| 通过 COL03 发送 Consumer Report | ⚠️ 待验证 | 需要确认 COL03 的 Report Descriptor |
-| 拦截并修改 Consumer Report | ⚠️ 待验证 | 需要 A2450 是否有 Consumer Control 接口 |
+| 通过 COL02 发送 Consumer Report | ✅ 可行 | COL02 = UsagePage 0x0C, 2 字节输入 |
 | 模拟 Consumer Control 设备 | ❌ 过于复杂 | 需要虚拟 HID 设备驱动 |
-| 暂不支持媒体键 | ✅ MVP 选择 | 后续版本处理 |
 
-### MVP 决定
+### MVP-B 媒体键计划
 
-**F7~F12 在 MVP 中暂不映射为媒体键**。当 FnLayer + F7~F12 时，原始 F7~F12 键码保持不变输出。
+FnLayer + F7~F12 映射为 Consumer Control Usage，通过 COL02 通道输出：
+
+| 物理键 | Key Usage | Consumer Usage |
+|--------|-----------|---------------|
+| F7 | 0x40 | Previous Track (0x00B6) |
+| F8 | 0x41 | Play/Pause (0x00CD) |
+| F9 | 0x42 | Next Track (0x00B5) |
+| F10 | 0x43 | Mute (0x00E2) |
+| F11 | 0x44 | Volume Down (0x00EA) |
+| F12 | 0x45 | Volume Up (0x00E9) |
+
+触发条件：Physical Left Ctrl（FnLayer）+ F7~F12。
+注意：Physical Fn 被映射为 Left Ctrl，不是 FnLayer，所以 Fn+F7 不触发媒体键。
 
 后续版本需要：
 

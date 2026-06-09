@@ -19,6 +19,7 @@ jobs:
           dotnet build src/OpenMagicKeyboard.Shared/OpenMagicKeyboard.Shared.csproj -c Release
           dotnet build tools/A2450HidLogger/A2450HidLogger.csproj -c Release
           dotnet build tools/A2450DescriptorDump/A2450DescriptorDump.csproj -c Release
+          dotnet build tools/A2450ConsumerControlProbe/A2450ConsumerControlProbe.csproj -c Release
           dotnet build src/OpenMagicKeyboard.App/OpenMagicKeyboard.App.csproj -c Release
       - name: Run transform tests
         run: |
@@ -32,3 +33,7 @@ jobs:
         run: |
           dotnet run --project tools/A2450DescriptorDump/A2450DescriptorDump.csproj -- --simulate
           if (!(Test-Path logs/a2450-descriptor-dump.simulated.json)) { throw "missing simulated descriptor dump" }
+      - name: Run simulated consumer control probe
+        run: |
+          dotnet run --project tools/A2450ConsumerControlProbe/A2450ConsumerControlProbe.csproj -- --simulate
+          if (!(Test-Path logs/a2450-consumer-control-probe.simulated.json)) { throw "missing simulated consumer control probe" }

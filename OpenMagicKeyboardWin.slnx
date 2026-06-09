@@ -10,5 +10,6 @@
     <Project Path="tools/A2450HidLogger/A2450HidLogger.csproj" />
     <Project Path="tools/A2450ReportLogger/A2450ReportLogger.csproj" />
     <Project Path="tools/A2450DescriptorDump/A2450DescriptorDump.csproj" />
+    <Project Path="tools/A2450ConsumerControlProbe/A2450ConsumerControlProbe.csproj" />
   </Folder>
 </Solution>

@@ -29,14 +29,22 @@ A2450 USB 模式下 HID Report 为 10 字节：
 
 **注意：A2450 的 Left Ctrl 是 bit 0 (0x01)，不是标准 HID 定义的 bit 1。**
 
+## HID Collection 总览（真实设备验证）
+
+| 接口 | UsagePage | Usage | InputReportLen | 说明 |
+|------|-----------|-------|---------------|------|
+| COL01 | 0x0001 | 0x0006 | 10 | 标准键盘 |
+| **COL02** | **0x000C** | 0x0001 | **2** | **Consumer Control（媒体键通道）** |
+| COL03 | 0xFF00 | 0x0006 | 65 | Vendor Defined（暂不处理） |
+
 ## 驱动目标
 
 - HIDClass lower filter driver
 - KMDF 框架
 - 仅绑定 VID_05AC & PID_029C（A2450 USB 模式）
-- 物理 Fn → 输出 Left Ctrl
-- 物理 Left Ctrl → 内部 FnLayer
-- FnLayer + 方向键/Backspace → Home/End/PageUp/PageDown/Delete
+- COL01：物理 Fn → 输出 Left Ctrl，物理 Left Ctrl → 内部 FnLayer
+- COL01：FnLayer + 方向键/Backspace → Home/End/PageUp/PageDown/Delete
+- COL02：FnLayer + F7~F12 → 媒体键（通过 Consumer Control 通道）
 
 ## 文件说明
 

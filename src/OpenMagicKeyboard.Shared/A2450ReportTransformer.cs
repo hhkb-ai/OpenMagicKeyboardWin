@@ -22,6 +22,19 @@ public sealed class A2450TransformOptions
 }
 
 /// <summary>
+/// Result of transforming an A2450 HID report, including optional consumer usage for media keys.
+/// </summary>
+/// <param name="KeyboardReport">The transformed 10-byte keyboard HID report.</param>
+/// <param name="ConsumerUsage">
+/// Consumer Control usage code if FnLayer + F7~F12 was detected, null otherwise.
+/// Should be sent via COL02 (UsagePage 0x000C).
+/// </param>
+public sealed record A2450TransformResult(
+    byte[] KeyboardReport,
+    ushort? ConsumerUsage
+);
+
+/// <summary>
 /// Transforms Apple Magic Keyboard A2450 HID reports to swap Fn/Ctrl and apply FnLayer mappings.
 ///
 /// A2450 USB HID Report (10 bytes):
@@ -128,5 +141,39 @@ public static class A2450ReportTransformer
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Transforms a 10-byte A2450 HID report and also detects FnLayer + F7~F12 media key combos.
+    /// Returns both the transformed keyboard report and an optional Consumer Control usage.
+    /// The ConsumerUsage should be sent via COL02 (UsagePage 0x000C), not COL01.
+    /// </summary>
+    public static A2450TransformResult TransformWithConsumerUsage(byte[] inputReport, A2450TransformOptions? options = null)
+    {
+        var keyboardReport = Transform(inputReport, options);
+
+        // Detect FnLayer + F7~F12 from the ORIGINAL input (before transformation).
+        // FnLayer is active when physical Left Ctrl is held.
+        ushort? consumerUsage = null;
+
+        if (inputReport.Length >= ReportLength && inputReport[0] == ReportId)
+        {
+            bool physicalLeftCtrlDown = (inputReport[1] & LeftCtrlMask) != 0;
+
+            if (physicalLeftCtrlDown)
+            {
+                for (int i = 3; i <= 8; i++)
+                {
+                    if (inputReport[i] != 0x00)
+                    {
+                        consumerUsage = A2450MediaKeyMapper.MapFnLayerFunctionKeyToConsumerUsage(inputReport[i]);
+                        if (consumerUsage.HasValue)
+                            break; // Take the first media key found
+                    }
+                }
+            }
+        }
+
+        return new A2450TransformResult(keyboardReport, consumerUsage);
     }
 }

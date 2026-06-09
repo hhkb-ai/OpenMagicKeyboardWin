@@ -116,16 +116,26 @@ uint8_t remapFnLayerKey(uint8_t usage) {
 }
 ```
 
-### FnLayer 媒体键（MVP 暂不实现）
+### FnLayer 媒体键（通过 COL02 Consumer Control）
 
-| 物理键 | Usage | 目标 | 状态 |
-|--------|-------|------|------|
-| F7 | 0x40 | Previous Track | 待实现（需要 Consumer Control） |
-| F8 | 0x41 | Play/Pause | 待实现 |
-| F9 | 0x42 | Next Track | 待实现 |
-| F10 | 0x43 | Mute | 待实现 |
-| F11 | 0x44 | Volume Down | 待实现 |
-| F12 | 0x45 | Volume Up | 待实现 |
+真实设备 DescriptorDump 确认：
+
+- **COL02** = Consumer Control, UsagePage 0x000C, Usage 0x0001, InputReportByteLength 2
+- **COL03** = Vendor Defined (0xFF00), 不是 Consumer Control
+
+媒体键应通过 COL02 的 Consumer Control 通道输出，不能塞进 COL01 的 10 字节键盘 Report。
+
+| 物理键 | Key Usage | Consumer Usage | Consumer Code |
+|--------|-----------|---------------|---------------|
+| F7 | 0x40 | Previous Track | 0x00B6 |
+| F8 | 0x41 | Play/Pause | 0x00CD |
+| F9 | 0x42 | Next Track | 0x00B5 |
+| F10 | 0x43 | Mute | 0x00E2 |
+| F11 | 0x44 | Volume Down | 0x00EA |
+| F12 | 0x45 | Volume Up | 0x00E9 |
+
+触发条件：Physical Left Ctrl（FnLayer）+ F7~F12。
+注意：Physical Fn 被映射为 Left Ctrl，不是 FnLayer，所以 Fn+F7 不触发媒体键。
 
 原因：标准键盘 Report（Usage Page 0x07）无法输出媒体键。媒体键属于 Consumer Control Usage Page（0x0C），需要额外的 HID Report 或虚拟设备。
 
