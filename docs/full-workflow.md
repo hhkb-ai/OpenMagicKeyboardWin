@@ -2,23 +2,11 @@
 
 This document describes the full workflow for the OpenMagicKeyboardWin A2450 project.
 
-## 0. Optional: rename the repository
-
-The current repository name is `-OpenMagicKeyboardWin`.
-
-Recommended name:
+Repository:
 
 ```text
-OpenMagicKeyboardWin
+https://github.com/hhkb-ai/OpenMagicKeyboardWin
 ```
-
-GitHub path:
-
-```text
-Settings -> Repository name -> OpenMagicKeyboardWin -> Rename
-```
-
-After renaming, update clone URLs accordingly.
 
 ## 1. Prepare the Windows development machine
 
@@ -38,18 +26,15 @@ dotnet --version
 
 ## 2. Clone the repository
 
-If the repository has not been renamed:
-
-```powershell
-git clone https://github.com/hhkb-ai/-OpenMagicKeyboardWin.git
-cd -OpenMagicKeyboardWin
-```
-
-If renamed:
-
 ```powershell
 git clone https://github.com/hhkb-ai/OpenMagicKeyboardWin.git
 cd OpenMagicKeyboardWin
+```
+
+If you cloned the old repository URL before the rename, update the remote:
+
+```powershell
+git remote set-url origin https://github.com/hhkb-ai/OpenMagicKeyboardWin.git
 ```
 
 ## 3. Build the logger
