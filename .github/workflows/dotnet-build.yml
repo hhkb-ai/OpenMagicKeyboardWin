@@ -19,3 +19,8 @@ jobs:
           dotnet build src/OpenMagicKeyboard.Shared/OpenMagicKeyboard.Shared.csproj -c Release
           dotnet build tools/A2450HidLogger/A2450HidLogger.csproj -c Release
           dotnet build src/OpenMagicKeyboard.App/OpenMagicKeyboard.App.csproj -c Release
+      - name: Run simulated logger
+        run: |
+          dotnet run --project tools/A2450HidLogger/A2450HidLogger.csproj -- --simulate
+          if (!(Test-Path logs/device-snapshot.simulated.json)) { throw "missing simulated device snapshot" }
+          if (!(Test-Path logs/a2450-key-events.simulated.jsonl)) { throw "missing simulated key events" }
