@@ -143,13 +143,14 @@ A2450FilterReadReportCompletion(
     }
 
     /*
-     * Check bytes returned by the lower driver.
-     * A valid A2450 keyboard report is exactly 10 bytes.
-     * If the lower driver returned fewer bytes, pass through unchanged.
+     * MVP-A only processes the confirmed 10-byte A2450 keyboard report.
+     * If the lower driver returns anything other than exactly 10 bytes,
+     * pass through unchanged. This avoids accidentally modifying other
+     * reports or future extended report formats.
      */
     bytesReturned = (size_t)Params->IoStatus.Information;
 
-    if (bytesReturned < A2450_REPORT_LENGTH)
+    if (bytesReturned != A2450_REPORT_LENGTH)
     {
         ctx->ReportsPassedThrough++;
         WdfRequestCompleteWithInformation(
