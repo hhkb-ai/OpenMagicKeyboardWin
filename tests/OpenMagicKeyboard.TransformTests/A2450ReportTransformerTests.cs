@@ -252,4 +252,127 @@ public class A2450ReportTransformerTests
     {
         Assert.Throws<ArgumentException>(() => A2450ReportTransformer.Transform(new byte[5]));
     }
+
+    // TC-21: Fn release → no Ctrl in output.
+    [Fact]
+    public void FnRelease_ClearsRemappedCtrl()
+    {
+        // Simulate: first report has Fn down, second report has Fn released
+        var fnDown = MakeReport(appleFn: 0x02);
+        var fnReleased = MakeReport(); // Fn not pressed
+
+        var output1 = A2450ReportTransformer.Transform(fnDown);
+        var output2 = A2450ReportTransformer.Transform(fnReleased);
+
+        Assert.Equal(0x01, output1[1]); // Ctrl present when Fn down
+        Assert.Equal(0x00, output2[1]); // Ctrl absent when Fn released
+    }
+
+    // TC-22: Fn + Ctrl + Up → PageUp with Ctrl.
+    [Fact]
+    public void FnPlusCtrlPlusUp_PageUpWithCtrl()
+    {
+        var input = MakeReport(modifier: 0x01, key1: 0x52, appleFn: 0x02);
+        var output = A2450ReportTransformer.Transform(input);
+
+        Assert.Equal(0x01, output[1]); // Left Ctrl from Fn
+        Assert.Equal(0x4B, output[3]); // PageUp
+    }
+
+    // TC-23: Fn + Ctrl + Down → PageDown with Ctrl.
+    [Fact]
+    public void FnPlusCtrlPlusDown_PageDownWithCtrl()
+    {
+        var input = MakeReport(modifier: 0x01, key1: 0x51, appleFn: 0x02);
+        var output = A2450ReportTransformer.Transform(input);
+
+        Assert.Equal(0x01, output[1]); // Left Ctrl from Fn
+        Assert.Equal(0x4E, output[3]); // PageDown
+    }
+
+    // TC-24: Fn + Ctrl + Left → Home with Ctrl.
+    [Fact]
+    public void FnPlusCtrlPlusLeft_HomeWithCtrl()
+    {
+        var input = MakeReport(modifier: 0x01, key1: 0x50, appleFn: 0x02);
+        var output = A2450ReportTransformer.Transform(input);
+
+        Assert.Equal(0x01, output[1]); // Left Ctrl from Fn
+        Assert.Equal(0x4A, output[3]); // Home
+    }
+
+    // TC-25: Fn + Ctrl + Right → End with Ctrl.
+    [Fact]
+    public void FnPlusCtrlPlusRight_EndWithCtrl()
+    {
+        var input = MakeReport(modifier: 0x01, key1: 0x4F, appleFn: 0x02);
+        var output = A2450ReportTransformer.Transform(input);
+
+        Assert.Equal(0x01, output[1]); // Left Ctrl from Fn
+        Assert.Equal(0x4D, output[3]); // End
+    }
+
+    // TC-26: Multiple FnLayer keys simultaneously (Ctrl + Backspace + Up).
+    [Fact]
+    public void FnLayer_MultipleKeys_AllRemapped()
+    {
+        // Ctrl + Backspace + Up → Delete + PageUp
+        var input = MakeReport(modifier: 0x01, key1: 0x2A, key2: 0x52);
+        var output = A2450ReportTransformer.Transform(input);
+
+        Assert.Equal(0x00, output[1]); // Ctrl removed (no Fn)
+        Assert.Equal(0x4C, output[3]); // Delete (Backspace remapped)
+        Assert.Equal(0x4B, output[4]); // PageUp (Up remapped)
+    }
+
+    // TC-27: FnLayer key in non-key1 slot (key3).
+    [Fact]
+    public void FnLayer_KeyInSlot3_Remapped()
+    {
+        var input = MakeReport(modifier: 0x01, key3: 0x50); // Left arrow in slot 3
+        var output = A2450ReportTransformer.Transform(input);
+
+        Assert.Equal(0x4A, output[5]); // Home (Left remapped in slot 3)
+    }
+
+    // TC-28: FnLayer with Shift modifier preserved.
+    [Fact]
+    public void FnLayer_WithShift_ShiftPreserved()
+    {
+        // Shift (0x02) + LeftCtrl (0x01) + Backspace
+        var input = MakeReport(modifier: 0x03, key1: 0x2A);
+        var output = A2450ReportTransformer.Transform(input);
+
+        Assert.Equal(0x02, output[1]); // Shift preserved, Ctrl removed
+        Assert.Equal(0x4C, output[3]); // Delete
+    }
+
+    // TC-29: Full 6-key slots with mixed remapping.
+    [Fact]
+    public void FullKeySlots_MixedRemapping()
+    {
+        // Ctrl + A, Backspace, Up, Down, Left, Right
+        var input = MakeReport(modifier: 0x01, key1: 0x04, key2: 0x2A, key3: 0x52, key4: 0x51, key5: 0x50, key6: 0x4F);
+        var output = A2450ReportTransformer.Transform(input);
+
+        Assert.Equal(0x00, output[1]); // Ctrl removed
+        Assert.Equal(0x04, output[3]); // A unchanged
+        Assert.Equal(0x4C, output[4]); // Delete (Backspace remapped)
+        Assert.Equal(0x4B, output[5]); // PageUp (Up remapped)
+        Assert.Equal(0x4E, output[6]); // PageDown (Down remapped)
+        Assert.Equal(0x4A, output[7]); // Home (Left remapped)
+        Assert.Equal(0x4D, output[8]); // End (Right remapped)
+    }
+
+    // TC-30: Fn + Ctrl + letter → Ctrl + letter, FnLayer active.
+    [Fact]
+    public void FnPlusCtrlPlusLetter_CtrlLetter_FnLayerActive()
+    {
+        // Fn + Ctrl + A → Ctrl + A (FnLayer active but A not remapped)
+        var input = MakeReport(modifier: 0x01, key1: 0x04, appleFn: 0x02);
+        var output = A2450ReportTransformer.Transform(input);
+
+        Assert.Equal(0x01, output[1]); // Left Ctrl from Fn
+        Assert.Equal(0x04, output[3]); // A unchanged (not in FnLayer map)
+    }
 }
