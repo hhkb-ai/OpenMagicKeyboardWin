@@ -2,16 +2,20 @@
 
 OpenMagicKeyboardWin is an independent open-source Windows utility and driver research project for Apple Magic Keyboard.
 
-The first target device is **Apple Magic Keyboard A2450**. The first core goal is **Fn ↔ Left Ctrl behavior** on Windows 10/11, with Bluetooth as the priority connection method.
+The first target device is **Apple Magic Keyboard A2450**. The current core goal is **Fn ↔ Left Ctrl behavior** on Windows 10/11.
+
+> **Current stage:** MVP-A Pre-VM hardening completed. The driver targets **USB mode only** (`VID_05AC&PID_029C`). The `.sys` is unsigned, not installed, not loaded, not production ready. Bluetooth support is a future goal (MVP-D).
 
 ## Goals
 
-- Detect Apple Magic Keyboard A2450 on Windows.
+- Detect Apple Magic Keyboard A2450 on Windows (USB mode).
 - Collect A2450 HID / Raw Input reports safely.
 - Implement a clean-room Windows solution for Fn and Left Ctrl behavior.
 - Support Fn-layer shortcuts such as Delete, Home, End, Page Up, and Page Down.
 - Add a tray app for connection status, battery status, and configuration.
 - Keep the project independent from proprietary commercial software.
+
+**Note:** The current driver implementation targets USB mode only. Bluetooth support (MVP-D) is a separate future phase that requires additional HID report analysis.
 
 ## Non-goals
 
