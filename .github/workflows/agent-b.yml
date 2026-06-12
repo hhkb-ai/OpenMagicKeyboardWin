@@ -79,8 +79,8 @@ jobs:
           git config user.email "agent-b@openmagickeyboard.local"
 
           # Parse allowed docs files from issue body
-          # Looks for "docs/xxx.md" patterns in the Allowed files section
-          DOCS_FILES=$(echo "$ISSUE_BODY" | grep -oP 'docs/[\w\-]+\.md' | sort -u)
+          # Looks for "docs/xxx.md" or "docs/subdir/xxx.md" patterns in the Allowed files section
+          DOCS_FILES=$(echo "$ISSUE_BODY" | grep -oP 'docs/[\w\-/]+\.md' | sort -u)
           CHANGED=""
 
           for FILE in $DOCS_FILES; do
@@ -132,6 +132,7 @@ jobs:
 
       - name: Commit and push
         if: steps.docs.outputs.changed == 'true'
+        id: commit
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -142,14 +143,16 @@ jobs:
           git add docs/
           if git diff --cached --quiet; then
             echo "No staged changes to commit. No-op exit."
+            echo "committed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
           git commit -m "Sync documentation for Issue #${ISSUE}"
           git push origin "$BRANCH"
+          echo "committed=true" >> $GITHUB_OUTPUT
 
       - name: Create PR
-        if: steps.docs.outputs.changed == 'true'
+        if: steps.docs.outputs.changed == 'true' && steps.commit.outputs.committed == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
