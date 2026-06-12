@@ -88,7 +88,7 @@ jobs:
             ISSUES="$ISSUES\n- ❌ Missing 'Closes #N' in PR body"
           fi
 
-          if ! echo "$PR_BODY" | grep -q "Safety confirmation"; then
+          if ! echo "$PR_BODY" | grep -qi "Safety Confirmation"; then
             REVIEW_PASSED=false
             ISSUES="$ISSUES\n- ❌ Missing safety confirmation section"
           fi

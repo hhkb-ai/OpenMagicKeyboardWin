@@ -50,13 +50,25 @@ test("Correctly detected parse failure", !noAllowedMatch || noAllowedMatch.lengt
 // Test 6: Forbidden path detection
 console.log("\nTest 6: Forbidden path detection");
 const forbiddenDiff = "driver/Filter.c\nsrc/main.c\ntests/test.cs";
-const forbiddenPaths = /driver\/|src\/|tests\/|README|\.github\/workflows\/|\.sln|\.vcxproj|\.csproj/;
+// Must match production regex in agent-a.yml: ^(driver/|src/|tests/|README\.md|\.github/workflows/|.*\.sln$|.*\.vcxproj$|.*\.csproj$)
+const forbiddenPaths = /^(driver\/|src\/|tests\/|README\.md|\.github\/workflows\/|.*\.sln$|.*\.vcxproj$|.*\.csproj$)/m;
 test("Correctly detected forbidden paths", forbiddenPaths.test(forbiddenDiff));
 
 // Test 6b: Allowed path not blocked
 console.log("\nTest 6b: Allowed path not blocked");
 const allowedDiff = "docs/test.md";
 test("Allowed path not blocked", !forbiddenPaths.test(allowedDiff));
+
+// Test 6c: README.md blocked but README not blocked
+console.log("\nTest 6c: README.md vs README");
+test("README.md is blocked", forbiddenPaths.test("README.md"));
+test("README is not blocked", !forbiddenPaths.test("README"));
+
+// Test 6d: Extension anchoring
+console.log("\nTest 6d: Extension anchoring");
+test(".sln file blocked", forbiddenPaths.test("project.sln"));
+test(".vcxproj file blocked", forbiddenPaths.test("project.vcxproj"));
+test(".csproj file blocked", forbiddenPaths.test("project.csproj"));
 
 // Test 7: dotnet test baseline failure detection
 console.log("\nTest 7: dotnet test failure detection");
@@ -82,9 +94,14 @@ Test summary
 - No driver installation`;
 
 const hasCloses = prBody.includes("Closes #");
-const hasSafety = prBody.includes("Safety Confirmation");
+const hasSafety = /Safety Confirmation/i.test(prBody);
 const hasValidation = prBody.includes("Validation");
 test("PR body contains required sections", hasCloses && hasSafety && hasValidation);
+
+// Test 9b: Case-insensitive safety confirmation
+console.log("\nTest 9b: Case-insensitive safety confirmation");
+const prBodyLower = `Closes #1\n\n## Safety confirmation\n- No driver installation`;
+test("Lowercase 'Safety confirmation' accepted", /Safety Confirmation/i.test(prBodyLower));
 
 // Summary
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
