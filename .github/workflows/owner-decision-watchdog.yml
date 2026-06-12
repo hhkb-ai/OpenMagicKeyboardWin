@@ -1,0 +1,143 @@
+name: Owner Decision Watchdog
+
+on:
+  schedule:
+    - cron: '*/20 * * * *'  # Every 20 minutes (staggered)
+  pull_request:
+    types: [labeled]
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  check-owner-decision:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for PRs needing Owner Decision
+        id: check_pr
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Condition 1: PR has approved-by-agent-c + approved-by-orchestrator + state:owner-decision
+          # and does not already have owner-decision-notified
+          PRS=$(gh pr list \
+            --state open \
+            --json number,title,labels \
+            --jq '.[] | select(
+              (.labels | map(.name) | contains(["approved-by-agent-c", "approved-by-orchestrator", "state:owner-decision"])) and
+              (.labels | map(.name) | contains(["owner-decision-notified"]) | not)
+            ) | .number')
+
+          if [ -z "$PRS" ]; then
+            echo "found_pr=false" >> $GITHUB_OUTPUT
+          else
+            echo "found_pr=true" >> $GITHUB_OUTPUT
+            echo "pr_numbers=$PRS" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check for high-risk owner gates
+        id: check_gates
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Condition 2: Issue or PR carries high-risk owner gate labels
+          GATE_LABELS="risk:high,gate:vm-required,gate:driver-install-required,gate:signing-required,gate:hardware-required,gate:rollback-required"
+
+          FOUND_GATES=""
+
+          for LABEL in $(echo "$GATE_LABELS" | tr ',' '\n'); do
+            # Check issues
+            ISSUES=$(gh issue list \
+              --label "$LABEL" \
+              --state open \
+              --json number \
+              --jq '.[].number' 2>/dev/null || echo "")
+
+            # Check PRs
+            PRS=$(gh pr list \
+              --label "$LABEL" \
+              --state open \
+              --json number \
+              --jq '.[].number' 2>/dev/null || echo "")
+
+            if [ -n "$ISSUES" ] || [ -n "$PRS" ]; then
+              FOUND_GATES="$FOUND_GATES $LABEL:issues=$ISSUES:prs=$PRS"
+            fi
+          done
+
+          if [ -z "$FOUND_GATES" ]; then
+            echo "found_gates=false" >> $GITHUB_OUTPUT
+          else
+            echo "found_gates=true" >> $GITHUB_OUTPUT
+            echo "gates=$FOUND_GATES" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Notify Owner for PRs
+        if: steps.check_pr.outputs.found_pr == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for PR in ${{ steps.check_pr.outputs.pr_numbers }}; do
+            # Add de-duplication label
+            gh pr edit $PR --add-label "owner-decision-notified" 2>/dev/null || true
+
+            # Comment notification
+            gh pr comment $PR --body "## 🔔 Owner Decision Required
+
+          This PR has been approved by Agent C and Orchestrator and is now waiting for Owner decision.
+
+          **Status**: \`state:owner-decision\`
+          **Next step**: Owner review and merge approval
+
+          Please review and approve or request changes.
+
+          🤖 Automated notification by Owner Decision Watchdog"
+
+            echo "Notified PR #$PR"
+          done
+
+      - name: Notify Owner for high-risk gates
+        if: steps.check_gates.outputs.found_gates == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Parse gates and notify
+          GATES="${{ steps.check_gates.outputs.gates }}"
+
+          for GATE_INFO in $GATES; do
+            LABEL=$(echo "$GATE_INFO" | cut -d: -f1)
+            ISSUES=$(echo "$GATE_INFO" | grep -oP 'issues=\K[^:]*')
+            PRS=$(echo "$GATE_INFO" | grep -oP 'prs=\K[^:]*')
+
+            for ISSUE in $ISSUES; do
+              if [ -n "$ISSUE" ]; then
+                gh issue comment $ISSUE --body "## 🔔 High-Risk Gate Detected
+
+          This issue has label \`$LABEL\` which requires Owner decision.
+
+          **Safety boundary**: Automatic actions are blocked until Owner approval.
+
+          🤖 Automated notification by Owner Decision Watchdog" 2>/dev/null || true
+              fi
+            done
+
+            for PR in $PRS; do
+              if [ -n "$PR" ]; then
+                gh pr comment $PR --body "## 🔔 High-Risk Gate Detected
+
+          This PR has label \`$LABEL\` which requires Owner decision.
+
+          **Safety boundary**: Automatic actions are blocked until Owner approval.
+
+          🤖 Automated notification by Owner Decision Watchdog" 2>/dev/null || true
+              fi
+            done
+          done
