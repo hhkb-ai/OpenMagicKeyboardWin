@@ -392,57 +392,73 @@ bcdedit /set testsigning on
 3. **添加调试日志**，所有 Report 修改可追踪
 4. **设置卸载路径**，出问题时可快速移除驱动
 
-## 12. 暂时不安装驱动，只做设计和伪代码
+## 12. 当前状态：Pre-VM hardening 已完成
 
-当前阶段目标：
+一个最小 KMDF HID lower-filter 原型已存在，实现了 C 变换逻辑和 IOCTL_HID_READ_REPORT 拦截。Pre-VM report-length hardening 已合并到 main 并通过 WDK 验证（Debug x64 + Release x64，0 warnings，0 errors）。
+
+但它仍然是构建阶段产物：
+- 未签名
+- 未安装
+- 未加载
+- 未绑定到真实硬件
+- 未在 VM 中测试
+- 未在真实 A2450 上验证
+- 不可用 / 不可用于生产
+
+当前阶段允许：
 
 1. ✅ 完成 HID Report 结构文档
 2. ✅ 完成状态机设计文档
 3. ✅ 完成驱动 MVP 设计文档
-4. ❌ 不安装驱动
-5. ❌ 不开启 TESTSIGNING
-6. ❌ 不编写实际驱动代码
+4. ✅ 编写 KMDF 驱动框架代码
+5. ✅ 编写 INF 文件模板
+6. ✅ 编写 C# 单元测试
+7. ✅ WDK Debug/Release 构建验证
+8. ✅ 文档同步
+9. ❌ 不安装驱动
+10. ❌ 不开启 TESTSIGNING
 
-设计文档足够完整后，下一步可以：
+下一步：
 
-1. 编写 KMDF 驱动框架代码（不编译）
-2. 编写 INF 文件模板
-3. 编写单元测试（用户态模拟）
+1. VM load test
+2. Real A2450 functional test in controlled environment
 
 ## 13. 后续开发任务拆分
 
-### Phase 1：设计完成（当前）
+### Phase 1：设计完成 ✅
 
 - [x] USBPcap 抓包分析
 - [x] HID Report 结构确认
 - [x] 状态机设计
 - [x] 驱动 MVP 设计文档
 
-### Phase 2：代码框架
+### Phase 2：代码框架 ✅
 
-- [ ] KMDF 驱动项目骨架
-- [ ] INF 文件（设备绑定 VID_05AC & PID_029C）
-- [ ] EvtIoRead 回调实现
-- [ ] Report 变换逻辑实现
-- [ ] 单元测试框架
+- [x] KMDF 驱动项目骨架
+- [x] INF 文件模板（设备绑定 VID_05AC & PID_029C）
+- [x] EvtIoInternalDeviceControl 回调实现
+- [x] Report 变换逻辑实现
+- [x] 单元测试框架（C# 37/37 passed）
 
-### Phase 3：编译验证
+### Phase 3：编译验证 ✅ (WDK verified)
 
-- [ ] 安装 WDK
-- [ ] 编译驱动
-- [ ] 开启 TESTSIGNING
-- [ ] 加载驱动并测试
+- [x] 安装 WDK
+- [x] 编译驱动（Debug x64 + Release x64，0 warnings，0 errors）
+- [x] Report-length hardening（merged to main）
+- [ ] 开启 TESTSIGNING（VM 测试阶段）
+- [ ] 加载驱动并测试（VM 测试阶段）
 
-### Phase 4：功能验证
+### Phase 4：功能验证 ⏳ (not started)
 
-- [ ] Fn → Left Ctrl 验证
-- [ ] Left Ctrl → FnLayer 验证
-- [ ] FnLayer + Backspace → Delete 验证
-- [ ] FnLayer + 方向键 → Home/End/PageUp/PageDown 验证
+- [ ] Fn → Left Ctrl 验证（VM）
+- [ ] Left Ctrl → FnLayer 验证（VM）
+- [ ] FnLayer + Backspace → Delete 验证（VM）
+- [ ] FnLayer + 方向键 → Home/End/PageUp/PageDown 验证（VM）
 - [ ] 多键同时按下测试
 - [ ] 长时间稳定性测试
+- [ ] Real A2450 functional test in controlled environment
 
-### Phase 5：完善
+### Phase 5：完善 ⏳ (not started)
 
 - [ ] 媒体键支持
 - [ ] 蓝牙模式支持

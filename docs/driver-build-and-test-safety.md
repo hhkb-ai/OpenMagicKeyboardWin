@@ -2,9 +2,20 @@
 
 ## Current Stage
 
-**Minimal HID read report interception implemented (unsigned .sys, not installed).**
+**Pre-VM report-length hardening completed and WDK verified (unsigned .sys, not installed).**
 
-The driver compiles successfully with WDK 10.0.26100. Filter.c now contains a real `EvtIoInternalDeviceControl` callback that intercepts `IOCTL_HID_READ_REPORT` and applies A2450 keyboard report transformation in a completion routine. The `.sys` file is a build artifact — it is NOT meant to be loaded on any system.
+The driver compiles successfully with WDK 10.0.26100. Filter.c contains a real `EvtIoInternalDeviceControl` callback that intercepts `IOCTL_HID_READ_REPORT` and applies A2450 keyboard report transformation in a completion routine. Report-length hardening has been merged into main and WDK Debug/Release builds confirmed (0 warnings, 0 errors).
+
+The driver is still:
+- unsigned
+- not installed
+- not loaded
+- not bound to real hardware
+- not verified in VM
+- not verified on real A2450
+- not production ready
+
+The `.sys` file is a build artifact — it is NOT meant to be loaded on any system.
 
 ## Build Is Not Installation
 
@@ -43,6 +54,8 @@ These actions are safe and expected during development:
 | Running DescriptorDump | Read-only device enumeration |
 | Running ConsumerControlProbe | Read-only device enumeration |
 | Static code review | Reading source files |
+| Documentation sync | Updating docs to reflect current state |
+| VM test plan design | Planning future VM load tests |
 
 ## WDK Build Environment
 
@@ -68,7 +81,7 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v17
 
 See the Toolset.props and Toolset.targets files in the project's `driver/platform-toolset/` directory for the content.
 
-### Build Result (2026-06-11)
+### Build Result (post-hardening, 2026-06-12)
 
 ```text
 已成功生成。
@@ -78,7 +91,8 @@ See the Toolset.props and Toolset.targets files in the project's `driver/platfor
 
 - Debug x64: `bin\Debug\x64\OpenMagicKeyboardA2450Filter.sys` (11 KB)
 - Release x64: `bin\Release\x64\OpenMagicKeyboardA2450Filter.sys` (11 KB)
-- .NET tests: 37/37 passed
+- .NET tests: 37/37 passed, 0 failed, 0 skipped
+- Report-length hardening: WDK Debug x64 + Release x64 verified
 
 ## Future Test Requirements
 

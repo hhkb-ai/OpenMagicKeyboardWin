@@ -2,7 +2,7 @@
 
 ## MVP-A — Keyboard Transform (Current)
 
-**Status: Minimal HID interception implemented (unsigned .sys, not installed)**
+**Status: Pre-VM hardening completed, WDK verified (unsigned .sys, not installed)**
 
 | Feature | Status |
 |---------|--------|
@@ -15,15 +15,30 @@
 | FnLayer + → → End | ✅ C# + C driver |
 | C# unit tests (37/37) | ✅ |
 | WDK/KMDF build scaffold | ✅ |
-| WDK build (Debug + Release) | ✅ 0 warnings, 0 errors |
+| WDK build (Debug + Release) | ✅ 0 warnings, 0 errors (post-hardening) |
 | .sys generation | ✅ Debug 11 KB, Release 11 KB |
 | Filter.c minimal interception | ✅ EvtIoInternalDeviceControl + completion routine |
+| Report length hardening | ✅ merged to main, WDK verified |
 | INF template | ✅ (design only) |
 | C#/C parity check | ✅ |
 
+**MVP-A current state:**
+- C# transform model complete
+- C# unit tests passing (37/37)
+- C driver transform logic implemented
+- Minimal HID READ_REPORT interception implemented
+- Pre-VM report-length hardening merged into main and WDK verified
+- Driver unsigned, not installed, not loaded, not bound to real hardware
+- VM load test not started
+- Real A2450 functional test not started
+- Not production ready
+
 **Remaining for MVP-A completion:**
-- [ ] Static review of minimal implementation
-- [ ] Verify .sys loads in a test VM (future phase)
+- [ ] Final orchestrator review
+- [ ] Documentation sync
+- [ ] MVP-A VM test plan
+- [ ] VM load test
+- [ ] Real A2450 functional test in controlled environment
 
 ## MVP-B — Media Keys
 
