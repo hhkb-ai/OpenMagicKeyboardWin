@@ -1,0 +1,130 @@
+name: Agent C - PR Review
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # Every 15 minutes
+  workflow_dispatch:
+  pull_request:
+    types: [labeled]  # Trigger when labels are added
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  check-and-review:
+    runs-on: ubuntu-latest
+    # Only run if PR has state:agent-c-review label
+    if: >
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && contains(github.event.label.name, 'state:agent-c-review'))
+    steps:
+      - name: Check for PRs to review
+        id: check
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Find PRs with state:agent-c-review label
+          PRS=$(gh pr list \
+            --label "state:agent-c-review" \
+            --state open \
+            --json number,title,headRefName \
+            --jq '.[0] // empty')
+
+          if [ -z "$PRS" ]; then
+            echo "No PR to review."
+            echo "found=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          PR_NUMBER=$(echo "$PRS" | jq -r '.number')
+          PR_TITLE=$(echo "$PRS" | jq -r '.title')
+          echo "found=true" >> $GITHUB_OUTPUT
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "pr_title=$PR_TITLE" >> $GITHUB_OUTPUT
+          echo "Found PR #$PR_NUMBER: $PR_TITLE"
+
+      - name: Checkout code
+        if: steps.check.outputs.found == 'true'
+        uses: actions/checkout@v4
+
+      - name: Review PR
+        if: steps.check.outputs.found == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR=${{ steps.check.outputs.pr_number }}
+
+          # Get PR details
+          PR_DIFF=$(gh pr diff $PR)
+          PR_BODY=$(gh pr view $PR --json body --jq '.body')
+          PR_FILES=$(gh pr view $PR --json files --jq '.files[].path')
+
+          # Basic checks
+          REVIEW_PASSED=true
+          ISSUES=""
+
+          # Check 1: Only allowed files modified
+          for FILE in $PR_FILES; do
+            if [[ ! "$FILE" =~ ^docs/ ]] && [[ ! "$FILE" =~ ^\.github/ ]]; then
+              if [[ "$FILE" =~ ^driver/ ]] || [[ "$FILE" =~ ^src/ ]] || [[ "$FILE" =~ ^tests/ ]]; then
+                # Check if this is an Agent A PR (code changes allowed)
+                PR_LABELS=$(gh pr view $PR --json labels --jq '.labels[].name')
+                if [[ ! "$PR_LABELS" =~ "agent:a" ]]; then
+                  REVIEW_PASSED=false
+                  ISSUES="$ISSUES\n- ❌ Code file modified in non-Agent-A PR: $FILE"
+                fi
+              fi
+            fi
+          done
+
+          # Check 2: PR body contains required sections
+          if ! echo "$PR_BODY" | grep -q "Closes #"; then
+            REVIEW_PASSED=false
+            ISSUES="$ISSUES\n- ❌ Missing 'Closes #N' in PR body"
+          fi
+
+          if ! echo "$PR_BODY" | grep -qi "Safety Confirmation"; then
+            REVIEW_PASSED=false
+            ISSUES="$ISSUES\n- ❌ Missing safety confirmation section"
+          fi
+
+          # Generate review report
+          if [ "$REVIEW_PASSED" = true ]; then
+            REVIEW="## Agent C Review (GitHub Actions)
+
+          **Result**: ✅ PASS
+
+          ### Checks
+          - File scope: OK
+          - PR body completeness: OK
+          - Safety confirmation: Present
+
+          ### Recommendation
+          **A. Recommend merge after Orchestrator review**
+
+          🤖 Automated review by Agent C GitHub Actions"
+
+            # Add orchestrator review label
+            gh pr edit $PR --add-label "state:orchestrator-review" 2>/dev/null || true
+          else
+            REVIEW="## Agent C Review (GitHub Actions)
+
+          **Result**: ❌ ISSUES FOUND
+
+          ### Issues
+          $ISSUES
+
+          ### Recommendation
+          **B. Do not merge yet; changes required**
+
+          🤖 Automated review by Agent C GitHub Actions"
+          fi
+
+          # Post review comment
+          gh pr comment $PR --body "$REVIEW"
+          echo "Review posted for PR #$PR"

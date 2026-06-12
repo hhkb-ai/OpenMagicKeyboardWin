@@ -34,11 +34,11 @@
 - Not production ready
 
 **Remaining for MVP-A completion:**
-- [ ] Final orchestrator review
-- [ ] Documentation sync
-- [ ] MVP-A VM test plan
-- [ ] VM load test
-- [ ] Real A2450 functional test in controlled environment
+- [ ] Final orchestrator review (not yet confirmed in GitHub)
+- [x] Documentation sync (PR #20 in review)
+- [x] MVP-A VM test plan (draft exists: `docs/mvp-a-vm-test-plan.md`, pending Owner approval)
+- [ ] VM load test (requires Owner approval)
+- [ ] Real A2450 functional test in controlled environment (requires Owner approval)
 
 ## MVP-B — Media Keys
 

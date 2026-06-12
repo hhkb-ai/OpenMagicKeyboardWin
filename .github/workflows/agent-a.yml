@@ -1,0 +1,234 @@
+name: Agent A - Code Hardening
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  check-and-execute:
+    runs-on: windows-latest
+    steps:
+      - name: Check for ready Agent A issues
+        id: check
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Requirement 1: Silent exit when no matching issue
+          # Requirement 2: Process only one issue at a time
+          ISSUES=$(gh issue list \
+            --label "agent:a" \
+            --label "state:ready" \
+            --state open \
+            --limit 1 \
+            --json number,title,body)
+
+          if [ "$ISSUES" = "[]" ] || [ -z "$ISSUES" ]; then
+            echo "found=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          ISSUE_NUMBER=$(echo "$ISSUES" | jq -r '.[0].number')
+          ISSUE_TITLE=$(echo "$ISSUES" | jq -r '.[0].title')
+          ISSUE_BODY=$(echo "$ISSUES" | jq -r '.[0].body')
+
+          # Requirement 3: Parse allowed files from issue body
+          ALLOWED_FILES=$(echo "$ISSUE_BODY" | grep -oP '(?<=^- `)[^`]+(?=`)' | head -10)
+
+          if [ -z "$ALLOWED_FILES" ]; then
+            echo "::error::Requirement 4: Failed to parse allowed files from issue body"
+            echo "found=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          echo "found=true" >> $GITHUB_OUTPUT
+          echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+          echo "issue_title=$ISSUE_TITLE" >> $GITHUB_OUTPUT
+          echo "allowed_files<<EOF" >> $GITHUB_OUTPUT
+          echo "$ALLOWED_FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Checkout code
+        if: steps.check.outputs.found == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run baseline dotnet test
+        if: steps.check.outputs.found == 'true'
+        id: baseline_test
+        shell: bash
+        run: |
+          # Requirement 6: Stop if baseline test fails
+          dotnet test tests/OpenMagicKeyboard.TransformTests/ --verbosity normal
+          if [ $? -ne 0 ]; then
+            echo "::error::Baseline dotnet test failed"
+            exit 1
+          fi
+
+      - name: Claim issue
+        if: steps.check.outputs.found == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE=${{ steps.check.outputs.issue_number }}
+          gh issue comment $ISSUE --body "CLAIMED by Agent A (GitHub Actions)"
+          gh issue edit $ISSUE \
+            --remove-label "state:ready" \
+            --add-label "state:in-progress" 2>/dev/null || \
+          gh issue edit $ISSUE --add-label "state:in-progress"
+
+      - name: Create branch
+        if: steps.check.outputs.found == 'true'
+        id: branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE=${{ steps.check.outputs.issue_number }}
+          BRANCH="agent-a/issue-${ISSUE}-hardening"
+          git checkout -b "$BRANCH"
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+
+      - name: Apply changes (placeholder)
+        if: steps.check.outputs.found == 'true'
+        id: apply
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE=${{ steps.check.outputs.issue_number }}
+          ALLOWED_FILES=${{ steps.check.outputs.allowed_files }}
+
+          # NOTE: Agent A workflow does NOT modify driver/*, src/*, or tests/* directly.
+          # Changes must be made manually or through a separate process.
+          # This step only validates that allowed files are correctly parsed.
+
+          echo "Allowed files for this issue:"
+          echo "$ALLOWED_FILES"
+
+          # No files are created by this step
+          # Actual changes would be applied here based on issue requirements
+
+      - name: Validate forbidden paths and whitelist
+        if: steps.check.outputs.found == 'true'
+        shell: bash
+        run: |
+          # Requirement 5: Check for forbidden paths in diff
+          DIFF=$(git diff --name-only)
+          ALLOWED_FILES="${{ steps.check.outputs.allowed_files }}"
+
+          # Fixed regex: properly matches all forbidden paths
+          FORBIDDEN_PATTERN="^(driver/|src/|tests/|README\.md|\.github/workflows/|.*\.sln$|.*\.vcxproj$|.*\.csproj$)"
+
+          if echo "$DIFF" | grep -qE "$FORBIDDEN_PATTERN"; then
+            echo "::error::Forbidden files modified: $(echo "$DIFF" | grep -E "$FORBIDDEN_PATTERN")"
+            exit 1
+          fi
+
+          # Whitelist check: verify all changed files are in allowed files
+          # Use exact line matching to prevent substring false positives
+          for FILE in $DIFF; do
+            # Allow .github/ files (workflow artifacts)
+            if [[ "$FILE" == .github/* ]]; then
+              continue
+            fi
+            # Check if file exactly matches a line in allowed files list
+            if ! echo "$ALLOWED_FILES" | grep -qxF "$FILE"; then
+              echo "::error::File not in allowed files list: $FILE"
+              exit 1
+            fi
+          done
+
+          echo "Forbidden path and whitelist check passed"
+
+      - name: Commit changes
+        if: steps.check.outputs.found == 'true'
+        id: commit
+        shell: bash
+        run: |
+          git add .github/
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            echo "committed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          git commit -m "Agent A: Process Issue #${{ steps.check.outputs.issue_number }}"
+          echo "committed=true" >> $GITHUB_OUTPUT
+
+      - name: Run post-change dotnet test
+        if: steps.check.outputs.found == 'true'
+        id: post_test
+        shell: bash
+        run: |
+          # Requirement 7: Stop if post-change test fails
+          dotnet test tests/OpenMagicKeyboard.TransformTests/ --verbosity normal
+          if [ $? -ne 0 ]; then
+            echo "::error::Post-change dotnet test failed"
+            exit 1
+          fi
+
+      - name: Push and create PR
+        if: steps.check.outputs.found == 'true' && steps.commit.outputs.committed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE=${{ steps.check.outputs.issue_number }}
+          BRANCH=${{ steps.branch.outputs.branch }}
+
+          git push origin "$BRANCH"
+
+          # Requirement 8: PR body with validation and safety confirmation
+          PR_URL=$(gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Agent A: Issue #${ISSUE}" \
+            --body "Closes #${ISSUE}
+
+          ## Summary
+          Automated issue processing by Agent A.
+
+          ## Changed Files
+          $(git diff --name-only main...$BRANCH | sed 's/^/- /')
+
+          ## Validation
+          - dotnet test (baseline): passed
+          - dotnet test (post-change): passed
+          - Forbidden path check: passed
+
+          ## Safety Confirmation
+          - ✅ No driver installation performed
+          - ✅ No pnputil / devcon / TESTSIGNING
+          - ✅ No registry / LowerFilters changes
+          - ✅ No real A2450 hardware binding
+          - ✅ No VM execution
+          - ✅ No code files modified (driver/*, src/*, tests/* untouched)
+          - ✅ Workflow does not merge PRs or close Issues
+
+          🤖 Generated with GitHub Actions")
+
+          gh pr edit $PR_URL --add-label "state:agent-c-review"
+          gh issue comment $ISSUE --body "PR created: $PR_URL"
+          gh issue edit $ISSUE \
+            --remove-label "state:in-progress" \
+            --add-label "state:pr-open" 2>/dev/null || \
+          gh issue edit $ISSUE --add-label "state:pr-open"
+
+      - name: Report failure
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE=${{ steps.check.outputs.issue_number }}
+          if [ -n "$ISSUE" ]; then
+            gh issue comment $ISSUE --body "❌ Agent A FAILED (run ${{ github.run_id }}). Orchestrator review required."
+          fi

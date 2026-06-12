@@ -1,0 +1,206 @@
+name: Agent B - Documentation Sync
+
+on:
+  schedule:
+    - cron: '*/20 * * * *'  # Every 20 minutes
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  check-and-execute:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for ready Agent B issues
+        id: check
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Pick the oldest ready issue to avoid ambiguity
+          ISSUES=$(gh issue list \
+            --label "agent:b" \
+            --label "state:ready" \
+            --state open \
+            --json number,title,body \
+            --jq 'sort_by(.number) | .[0] // empty')
+
+          if [ -z "$ISSUES" ]; then
+            echo "No ready issue for Agent B. Silent exit."
+            echo "found=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          ISSUE_NUMBER=$(echo "$ISSUES" | jq -r '.number')
+          ISSUE_TITLE=$(echo "$ISSUES" | jq -r '.title')
+          echo "found=true" >> $GITHUB_OUTPUT
+          echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+          echo "issue_title=$ISSUE_TITLE" >> $GITHUB_OUTPUT
+          echo "Found issue #$ISSUE_NUMBER: $ISSUE_TITLE"
+
+      - name: Checkout code
+        if: steps.check.outputs.found == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Claim issue
+        if: steps.check.outputs.found == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE=${{ steps.check.outputs.issue_number }}
+          gh issue comment $ISSUE --body "CLAIMED by Agent B (GitHub Actions)"
+          gh issue edit $ISSUE --remove-label "state:ready" 2>/dev/null || true
+
+      - name: Run dotnet test (baseline)
+        if: steps.check.outputs.found == 'true'
+        shell: bash
+        run: |
+          dotnet test tests/OpenMagicKeyboard.TransformTests/OpenMagicKeyboard.TransformTests.csproj --verbosity minimal
+
+      - name: Create branch and parse allowed files
+        if: steps.check.outputs.found == 'true'
+        id: docs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE=${{ steps.check.outputs.issue_number }}
+          BRANCH="agent-b/issue-${ISSUE}-docs"
+          ISSUE_BODY=$(gh issue view $ISSUE --json body --jq '.body')
+
+          git checkout -b "$BRANCH"
+          git config user.name "Agent B"
+          git config user.email "agent-b@openmagickeyboard.local"
+
+          # Parse allowed docs files from issue body
+          # Looks for "docs/xxx.md" or "docs/subdir/xxx.md" patterns in the Allowed files section
+          DOCS_FILES=$(echo "$ISSUE_BODY" | grep -oP 'docs/[\w\-/]+\.md' | sort -u)
+          CHANGED=""
+
+          for FILE in $DOCS_FILES; do
+            if [ -f "$FILE" ]; then
+              echo "Allowed file exists: $FILE"
+              CHANGED="$CHANGED $FILE"
+            else
+              echo "Allowed file will be created: $FILE"
+              CHANGED="$CHANGED $FILE"
+            fi
+          done
+
+          if [ -z "$CHANGED" ]; then
+            echo "No docs files found in issue allowed files. No-op exit."
+            echo "changed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "changed=true" >> $GITHUB_OUTPUT
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+
+      - name: Validate file safety
+        if: steps.docs.outputs.changed == 'true'
+        shell: bash
+        run: |
+          MODIFIED=$(git diff --name-only)
+          echo "Modified files:"
+          echo "$MODIFIED"
+
+          # Block any code file changes
+          if echo "$MODIFIED" | grep -qE '^(driver/|src/|tests/)'; then
+            echo "ERROR: Code files modified. Aborting."
+            exit 1
+          fi
+
+          # Block forbidden docs files
+          if echo "$MODIFIED" | grep -q 'docs/mvp-a-vm-test-plan.md'; then
+            echo "ERROR: Forbidden file docs/mvp-a-vm-test-plan.md modified. Aborting."
+            exit 1
+          fi
+
+          echo "File safety check passed."
+
+      - name: Run dotnet test (post-change)
+        if: steps.docs.outputs.changed == 'true'
+        shell: bash
+        run: |
+          dotnet test tests/OpenMagicKeyboard.TransformTests/OpenMagicKeyboard.TransformTests.csproj --verbosity minimal
+
+      - name: Commit and push
+        if: steps.docs.outputs.changed == 'true'
+        id: commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE=${{ steps.check.outputs.issue_number }}
+          BRANCH=${{ steps.docs.outputs.branch }}
+
+          git add docs/
+          if git diff --cached --quiet; then
+            echo "No staged changes to commit. No-op exit."
+            echo "committed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          git commit -m "Sync documentation for Issue #${ISSUE}"
+          git push origin "$BRANCH"
+          echo "committed=true" >> $GITHUB_OUTPUT
+
+      - name: Create PR
+        if: steps.docs.outputs.changed == 'true' && steps.commit.outputs.committed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE=${{ steps.check.outputs.issue_number }}
+          BRANCH=${{ steps.docs.outputs.branch }}
+          FILES=$(git diff --name-only HEAD~1..HEAD | sed 's/^/- /')
+
+          PR_URL=$(gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Agent B: Documentation for Issue #${ISSUE}" \
+            --body "Closes #${ISSUE}
+
+          ## Summary
+          Automated documentation sync by Agent B.
+
+          ## Changed files
+          ${FILES}
+
+          ## Validation
+          - dotnet test: passed (baseline and post-change)
+          - Only docs files modified
+          - No code files touched (driver/*, src/*, tests/*)
+          - Forbidden files check passed
+
+          ## Safety confirmation
+          - No driver installation
+          - No pnputil / devcon / TESTSIGNING
+          - No registry / LowerFilters changes
+          - No real A2450 hardware binding
+          - No VM execution
+          - No push to main
+
+          🤖 Generated with [Claude Code](https://claude.com/claude-code) via GitHub Actions")
+
+          gh pr edit $PR_URL --add-label "state:agent-c-review" 2>/dev/null || true
+          gh issue comment $ISSUE --body "PR created: $PR_URL"
+          gh issue edit $ISSUE --add-label "state:pr-open" 2>/dev/null || true
+          echo "PR created: $PR_URL"
+
+      - name: Report failure
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE=${{ steps.check.outputs.issue_number }}
+          if [ -n "$ISSUE" ]; then
+            gh issue comment $ISSUE --body "❌ Agent B FAILED (run ${{ github.run_id }}). Check workflow logs for details. Orchestrator review required."
+          fi
