@@ -1,0 +1,177 @@
+name: Owner Decision Watchdog
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  pull_request:
+    types: [labeled]
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+env:
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  check-owner-decision:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' && (
+        github.event.label.name == 'state:owner-decision' ||
+        github.event.label.name == 'risk:high' ||
+        startsWith(github.event.label.name, 'gate:')
+      )) ||
+      (github.event_name == 'issues' && (
+        github.event.label.name == 'state:owner-decision' ||
+        github.event.label.name == 'risk:high' ||
+        startsWith(github.event.label.name, 'gate:')
+      ))
+    steps:
+      - name: Check for PRs needing Owner Decision
+        id: check_pr
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # PR must contain all three required labels, must not have notification label
+          # Other labels are allowed
+          PRS=$(gh pr list \
+            --repo "$GH_REPO" \
+            --state open \
+            --limit 100 \
+            --json number,labels \
+            --jq '[.[] | select(
+              (.labels | map(.name) | contains(["approved-by-agent-c"])) and
+              (.labels | map(.name) | contains(["approved-by-orchestrator"])) and
+              (.labels | map(.name) | contains(["state:owner-decision"])) and
+              (.labels | map(.name) | contains(["owner-decision-notified"]) | not)
+            )] | .[].number')
+
+          if [ -z "$PRS" ]; then
+            echo "found_pr=false" >> $GITHUB_OUTPUT
+          else
+            echo "found_pr=true" >> $GITHUB_OUTPUT
+            echo "pr_numbers<<EOF" >> $GITHUB_OUTPUT
+            echo "$PRS" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check for high-risk owner gates
+        id: check_gates
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          GATE_LABELS=(
+            "risk:high"
+            "gate:vm-required"
+            "gate:driver-install-required"
+            "gate:signing-required"
+            "gate:hardware-required"
+            "gate:rollback-required"
+          )
+
+          FOUND_ITEMS=""
+
+          for LABEL in "${GATE_LABELS[@]}"; do
+            # Issues with this label, excluding already notified
+            ISSUE_NUMBERS=$(gh issue list \
+              --repo "$GH_REPO" \
+              --label "$LABEL" \
+              --state open \
+              --limit 100 \
+              --json number,labels \
+              --jq '[.[] | select(.labels | map(.name) | index("gate-notified") == null)] | .[].number' 2>/dev/null || echo "")
+
+            for NUM in $ISSUE_NUMBERS; do
+              if [ -n "$NUM" ]; then
+                FOUND_ITEMS="$FOUND_ITEMS issue:$NUM:$LABEL"
+              fi
+            done
+
+            # PRs with this label, excluding already notified
+            PR_NUMBERS=$(gh pr list \
+              --repo "$GH_REPO" \
+              --label "$LABEL" \
+              --state open \
+              --limit 100 \
+              --json number,labels \
+              --jq '[.[] | select(.labels | map(.name) | index("gate-notified") == null)] | .[].number' 2>/dev/null || echo "")
+
+            for NUM in $PR_NUMBERS; do
+              if [ -n "$NUM" ]; then
+                FOUND_ITEMS="$FOUND_ITEMS pr:$NUM:$LABEL"
+              fi
+            done
+          done
+
+          if [ -z "$FOUND_ITEMS" ]; then
+            echo "found_gates=false" >> $GITHUB_OUTPUT
+          else
+            echo "found_gates=true" >> $GITHUB_OUTPUT
+            echo "items<<EOF" >> $GITHUB_OUTPUT
+            echo "$FOUND_ITEMS" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Notify Owner for PRs
+        if: steps.check_pr.outputs.found_pr == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRS: ${{ steps.check_pr.outputs.pr_numbers }}
+        run: |
+          echo "$PRS" | while read -r PR; do
+            if [ -z "$PR" ]; then continue; fi
+
+            gh pr edit "$PR" --repo "$GH_REPO" --add-label "owner-decision-notified" 2>/dev/null || true
+
+            gh pr comment "$PR" --repo "$GH_REPO" --body "## 🔔 Owner Decision Required
+
+          This PR has been approved by Agent C and Orchestrator and is now waiting for Owner decision.
+
+          **Status**: \`state:owner-decision\`
+          **Next step**: Owner review and merge approval
+
+          🤖 Automated notification by Owner Decision Watchdog"
+
+            echo "Notified PR #$PR"
+          done
+
+      - name: Notify Owner for high-risk gates
+        if: steps.check_gates.outputs.found_gates == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ITEMS: ${{ steps.check_gates.outputs.items }}
+        run: |
+          echo "$ITEMS" | while read -r ITEM; do
+            if [ -z "$ITEM" ]; then continue; fi
+
+            TYPE=$(echo "$ITEM" | cut -d: -f1)
+            NUMBER=$(echo "$ITEM" | cut -d: -f2)
+            LABEL=$(echo "$ITEM" | cut -d: -f3-)
+
+            BODY="## 🔔 High-Risk Gate Detected
+
+          This $TYPE has label \`$LABEL\` which requires Owner decision.
+
+          **Safety boundary**: Automatic actions are blocked until Owner approval.
+
+          🤖 Automated notification by Owner Decision Watchdog"
+
+            if [ "$TYPE" = "issue" ]; then
+              gh issue edit "$NUMBER" --repo "$GH_REPO" --add-label "gate-notified" 2>/dev/null || true
+              gh issue comment "$NUMBER" --repo "$GH_REPO" --body "$BODY" 2>/dev/null || true
+              echo "Notified issue #$NUMBER"
+            elif [ "$TYPE" = "pr" ]; then
+              gh pr edit "$NUMBER" --repo "$GH_REPO" --add-label "gate-notified" 2>/dev/null || true
+              gh pr comment "$NUMBER" --repo "$GH_REPO" --body "$BODY" 2>/dev/null || true
+              echo "Notified PR #$NUMBER"
+            fi
+          done
