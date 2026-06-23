@@ -1,8 +1,6 @@
 name: Agent B - Documentation Sync
 
 on:
-  schedule:
-    - cron: '*/20 * * * *'  # Every 20 minutes
   workflow_dispatch:
 
 permissions:
