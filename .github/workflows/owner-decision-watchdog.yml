@@ -1,8 +1,7 @@
 name: Owner Decision Watchdog
 
 on:
-  schedule:
-    - cron: '*/30 * * * *'
+  workflow_dispatch:
   pull_request:
     types: [labeled]
   issues:
@@ -20,7 +19,7 @@ jobs:
   check-owner-decision:
     runs-on: ubuntu-latest
     if: >
-      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request' && (
         github.event.label.name == 'state:owner-decision' ||
         github.event.label.name == 'risk:high' ||
