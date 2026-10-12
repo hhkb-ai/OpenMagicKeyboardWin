@@ -11,6 +11,14 @@ public sealed class A2450TransformOptions
     public bool SwapFnAndLeftCtrl { get; set; } = true;
 
     /// <summary>
+    /// When true, physical Fn acts as an additional Left Ctrl, and physical
+    /// Left Ctrl remains unchanged. Takes priority over the legacy swap mode.
+    /// Supported by this transformer for USB A2450 reports only; Bluetooth
+    /// report layout still needs separate hardware validation.
+    /// </summary>
+    public bool FnAsAdditionalLeftCtrl { get; set; } = false;
+
+    /// <summary>
     /// When true, clear the Apple Fn state byte (byte 9) from the output report.
     /// </summary>
     public bool ClearAppleFnByte { get; set; } = true;
@@ -95,6 +103,20 @@ public static class A2450ReportTransformer
         // --- Read original physical state BEFORE any mutation ---
         bool physicalFnDown = (output[9] & AppleFnMask) != 0;
         bool physicalLeftCtrlDown = (output[1] & LeftCtrlMask) != 0;
+
+        // Single-purpose layout: physical Fn is an additional Left Ctrl.
+        // Keep the physical Left Ctrl modifier intact (no swap/FnLayer).
+        // This applies to the confirmed USB report format ONLY.
+        if (options.FnAsAdditionalLeftCtrl)
+        {
+            if (physicalFnDown)
+                output[1] |= LeftCtrlMask;
+
+            if (options.ClearAppleFnByte)
+                output[9] &= unchecked((byte)~AppleFnMask);
+
+            return output;
+        }
 
         if (!options.SwapFnAndLeftCtrl)
             return output;
