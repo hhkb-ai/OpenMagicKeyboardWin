@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using OpenMagicKeyboard.Shared;
 
 namespace A2450DescriptorDump;
 
@@ -42,7 +43,7 @@ internal static class Program
         foreach (var e in entries)
         {
             var cc = e.UsagePage == 0x0C ? " *** Consumer Control! ***" : "";
-            Console.WriteLine($"  {e.CollectionLabel,-8} UsagePage=0x{e.UsagePage:X4} Usage=0x{e.Usage:X4}{cc}");
+            Console.WriteLine($"  {e.CollectionLabel,-8} [{e.Transport ?? "Unknown"}] UsagePage=0x{e.UsagePage:X4} Usage=0x{e.Usage:X4}{cc}");
             Console.WriteLine($"           Path: {e.DevicePath}");
             Console.WriteLine($"           InputReportByteLength:  {e.InputReportByteLength}");
             Console.WriteLine($"           OutputReportByteLength: {e.OutputReportByteLength}");
@@ -94,15 +95,14 @@ internal static class Program
                 var path = detailData.DevicePath;
 
                 // Filter by VID & PID
-                if (!path.Contains(AppleVid, StringComparison.OrdinalIgnoreCase) ||
-                    !path.Contains(A2450Pid, StringComparison.OrdinalIgnoreCase))
+                if (!A2450DeviceIdentity.IsA2450(path))
                     continue;
 
                 // Determine collection label
                 string label = "UNKNOWN";
-                if (path.Contains("MI_01&COL01", StringComparison.OrdinalIgnoreCase)) label = "COL01";
-                else if (path.Contains("MI_01&COL02", StringComparison.OrdinalIgnoreCase)) label = "COL02";
-                else if (path.Contains("MI_01&COL03", StringComparison.OrdinalIgnoreCase)) label = "COL03";
+                if (path.Contains("COL01", StringComparison.OrdinalIgnoreCase)) label = "COL01";
+                else if (path.Contains("COL02", StringComparison.OrdinalIgnoreCase)) label = "COL02";
+                else if (path.Contains("COL03", StringComparison.OrdinalIgnoreCase)) label = "COL03";
                 else if (path.Contains("MI_00", StringComparison.OrdinalIgnoreCase)) label = "MI_00";
                 else if (path.Contains("MI_01", StringComparison.OrdinalIgnoreCase)) label = "MI_01";
 
@@ -142,6 +142,7 @@ internal static class Program
                                 {
                                     DevicePath = path,
                                     CollectionLabel = label,
+                                    Transport = A2450DeviceIdentity.GetTransport(path),
                                     UsagePage = caps.UsagePage,
                                     Usage = caps.Usage,
                                     InputReportByteLength = caps.InputReportByteLength,
@@ -288,6 +289,7 @@ internal sealed class HidCollectionEntry
 {
     public string? DevicePath { get; set; }
     public string? CollectionLabel { get; set; }
+    public string? Transport { get; set; }
     public ushort UsagePage { get; set; }
     public ushort Usage { get; set; }
     public ushort InputReportByteLength { get; set; }
