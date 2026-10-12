@@ -47,11 +47,11 @@ public sealed class A2450FnAsCtrlOnlyTests
     [InlineData(0x19)] // V
     [InlineData(0x1D)] // Z
     [InlineData(0x04)] // A
-    public void FnWithLetter_OutputsCtrlAndOriginalLetter(byte key)
+    public void FnWithLetter_OutputsCtrlAndOriginalLetter(int key)
     {
-        var output = A2450ReportTransformer.Transform(Report(key: key, fn: true), Options);
+        var output = A2450ReportTransformer.Transform(Report(key: checked((byte)key), fn: true), Options);
         Assert.Equal((byte)0x01, output[1]);
-        Assert.Equal(key, output[3]);
+        Assert.Equal((byte)key, output[3]);
     }
 
     [Fact]
